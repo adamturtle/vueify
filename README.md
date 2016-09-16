@@ -67,17 +67,6 @@ npm install vueify --save-dev
 browserify -t vueify -e src/main.js -o build/build.js
 ```
 
-If you are using npm 3+ and **babel**, it no longer auto install the peer dependencies. So you will also have to also install the babel-related dependencies:
-
-``` bash
-npm install\
-  babel-core\
-  babel-preset-es2015\
-  babel-runtime\
-  babel-plugin-transform-runtime\
-  --save-dev
-```
-
 And this is all you need to do in your main entry file:
 
 ``` js
@@ -86,9 +75,9 @@ var Vue = require('vue')
 var App = require('./app.vue')
 
 new Vue({
-  el: 'body',
-  components: {
-    app: App
+  el: '#app',
+  render: function (createElement) {
+    return createElement(App)
   }
 })
 ```
@@ -97,7 +86,7 @@ In your HTML:
 
 ``` html
 <body>
-  <app></app>
+  <div id="app"></div>
   <script src="build.js"></script>
 </body>
 ```
@@ -121,35 +110,34 @@ Make sure to have the `NODE_ENV` environment variable set to `"production"` when
 
 If you are using Gulp, note that `gulp --production` **does not** affect vueify; you still need to explicitly set `NODE_ENV=production`.
 
-## ES2015 when `babel-core` installed
+## ES2015 with Babel
 
-Vueify automatically transforms the JavaScript in your `*.vue` components using Babel when it is installed. Write ES2015 today!
+Vueify is pre-configured to work with Babel. Simply install Babel-related dependencies:
 
-The default Babel (6) options used for Vue.js components are:
-
-``` js
-{
-  "presets": ["es2015"],
-  "plugins": ["transform-runtime"]
-}
+``` bash
+npm install\
+  babel-core\
+  babel-preset-es2015\
+  --save-dev
 ```
 
-If you wish to override this, you can add a `.babelrc` file at the root of your project:
+Then create a `.babelrc`:
 
 ``` json
 {
-  "presets": ["es2015", "stage-2"],
-  "plugins": ["transform-runtime"]
+  "presets": ["es2015"]
 }
 ```
 
+And voila! You can now write ES2015 in your `*.vue` files. Note if you want to use ES2015 on normal `*.js` files, you will also need [babelify](https://github.com/babel/babelify).
+
 You can also configure babel with the `babel` field in `vue.config.js`, which will take the highest priority.
 
-## Enabling Pre-Processors
+## Enabling Other Pre-Processors
 
-You need to install the corresponding node modules to enable the compilation. e.g. to get stylus compiled in your Vue components, do `npm install stylus --save-dev`.
+For other pre-processors, you also need to install the corresponding node modules to enable the compilation. e.g. to get stylus compiled in your Vue components, do `npm install stylus --save-dev`.
 
-These are the built-in preprocessors:
+These are the preprocessors supported by vueify out of the box:
 
 - stylus
 - less
@@ -158,13 +146,9 @@ These are the built-in preprocessors:
 - pug
 - coffee-script (use `coffee` in [config section](#configuring-options))
 
-## Autoprefix by Default
-
-Starting in 5.0.0, all CSS output via vueify will be autoprefixed by default. See [config section](#configuring-options) below on customizing the options.
-
 ## PostCSS
 
-Vueify uses PostCSS for scoped CSS rewrite and autoprefixing. You can also provide your own PostCSS plugins! See [config section](#configuring-options) below for an example.
+Vueify uses PostCSS for scoped CSS rewrite. You can also provide your own PostCSS plugins! See [config section](#configuring-options) below for an example.
 
 ## Configuring Options
 
@@ -178,15 +162,6 @@ module.exports = {
   },
   // provide your own postcss plugins
   postcss: [...],
-  // configure autoprefixer
-  autoprefixer: {
-    browsers: ['last 2 versions']
-  },
-  // configure html minification in production mode
-  // see https://github.com/kangax/html-minifier#options-quick-reference
-  htmlMinifier: {
-    // ...
-  },
   // register custom compilers
   customCompilers: {
     // for tags with lang="ts"
@@ -209,9 +184,7 @@ Example using custom PostCSS plugin:
 var cssnext = require('cssnext')
 
 module.exports = {
-  postcss: [cssnext()],
-  // disable autoprefixer since cssnext comes with it
-  autoprefixer: false
+  postcss: [cssnext()]
 }
 ```
 
@@ -251,9 +224,7 @@ browserify('./main.js')
   .pipe(fs.createWriteStream("bundle.js"))
 ```
 
-### Scoped CSS
-
-> Experimental
+## Scoped CSS
 
 When a `<style>` tag has the `scoped` attribute, its CSS will apply to elements of the current component only. This is similar to the style encapsulation found in Shadow DOM, but doesn't require any polyfills. It is achieved by transforming the following:
 
@@ -281,17 +252,15 @@ Into the following:
 </template>
 ```
 
-#### Notes
+### Scoped CSS Notes
 
 1. You can include both scoped and non-scoped styles in the same component.
 
-2. A child component's root node will be affected by both the parent's scoped CSS and the child's scoped CSS.
+2. The following will be affected by both the parent's scoped CSS and the child's scoped CSS:
+  - A child component's root node
+  - Content inserted to a child component via `<slot>`
 
-3. Partials are not affected by scoped styles.
-
-### Hot Reload
-
-> Experimental
+## Hot Reload
 
 To enable hot component reloading, you need to install the [browserify-hmr](https://github.com/AgentME/browserify-hmr) plugin:
 
@@ -300,7 +269,38 @@ npm install browserify-hmr --save-dev
 watchify -p browserify-hmr index.js -o bundle.js
 ```
 
-A full setup example with hot reloading is available at [vuejs/vueify-example](https://github.com/vuejs/vueify-example).
+You can scaffold a hot-reload enabled project easily using `vue-cli` and the [this template](https://github.com/vuejs-templates/browserify-simple-2.0).
+
+## CSS Extraction
+
+By default, the CSS in each component is injected into the page using a `<style>` tag. This works well in most scenarios and enables CSS hot-reloading during development. However, in some cases you may prefer extracting all component CSS into a single file for better performance. To do that, you will need to add the CSS extraction browserify plugin.
+
+Via CLI:
+
+``` bash
+browserify -t vueify -p [ vueify/plugins/extract-css -o dist/bundle.css ] main.js
+```
+
+Via API:
+
+``` js
+browserify('./main.js')
+  .transform('vueify')
+  .plugin('vueify/plugins/extract-css', {
+    out: 'dist/bundle.css' // can also be a WritableStream
+  })
+  .bundle()
+```
+
+This only works for vueify 9+. For Vue 1.x / vueify 8.x you can use [vueify-extract-css](https://github.com/rawcreative/vueify-extract-css).
+
+## Building for Production
+
+When building for production, follow these steps to ensure smaller bundle size:
+
+1. Make sure `process.env.NODE_ENV === "production"`. This tells `vueify` to avoid including hot-reload related code.
+
+2. Apply a global [envify](https://github.com/hughsk/envify) transform to your bundle. This allows the minifier to strip out all the warnings in Vue's source code wrapped in env variable conditional blocks.
 
 ## Compiler API
 
@@ -319,78 +319,9 @@ compiler.compile(fileContent, filePath, function (err, result) {
 
 Currently there are syntax highlighting support for [Sublime Text](https://github.com/vuejs/vue-syntax-highlight), [Atom](https://atom.io/packages/language-vue), [Vim](https://github.com/posva/vim-vue), [Visual Studio Code](https://marketplace.visualstudio.com/items/liuji-jim.vue) and [Brackets](https://github.com/pandao/brackets-vue). Contributions for other editors/IDEs are highly appreciated! If you are not using any pre-processors in Vue components, you can also get by by treating `*.vue` files as HTML in your editor.
 
-## Example
-
-For an example setup using most of the features mentioned above, see [vuejs/vueify-example](https://github.com/vuejs/vueify-example).
-
-If you use Webpack, there's also [vue-loader](https://github.com/vuejs/vue-loader) that does the same thing.
-
 ## Changelog
 
-### 8.5.0
-
-- Now also supports passing in Vueify options via browserify transform options. The options are exactly the same as `vue.config.js`.
-
-### 8.4.0
-
-- Removed peer dependencies. Now vueify simply warns you when you are using a feature that requires a missing dependency.
-
-### 8.3.0
-
-- Added compile-time template syntax validation that catches common errors.
-- Code blocks with base indents are now de-indented before being processed.
-
-### 8.2.0
-
-- Added `htmlMinifier` option in config that allows configuration of HTML minification in production mode.
-- Fixed HTML minification removing `type` attribute for `<input type="text">`.
-
-### 8.1.0
-
-- Vueify now respects `.babelrc` over default options.
-
-### 8.0.0
-
-- `babel-core` is now a peer dependency.
-
-### 7.0.0
-
-- Added relative `@import` path support and import dependency tracking for LESS, SASS & Stylus. Now you can `@import` files using relative paths to the file being edited, and editing these imported files will also trigger watchify rebuild.
-
-- Removed built-in compiler for `myth`. Prefer using PostCSS + CSSNext.
-
-### 6.0.0
-
-- Upgraded to Babel 6. This is a breaking change because the babel configuration is now different.
-
-### 5.0.4
-
-- Added `postcss` option for providing custom PostCSS plugins.
-
-### 5.0.0
-
-- New: CSS output is now autoprefixed by default.
-- Changed: [New config file format](#configuring-options)
-
-### 4.0.0
-
-- Support ES2015 by default.
-
-### 3.0.0
-
-- Added support for [scoped CSS](#scoped-css) and [component hot reloading](#hot-reload).
-
-### 2.0.1
-
-- Built-in lang for ES2015 has been renamed from `es6` to `es`.
-
-- `es` transforms now uses loose mode and optional runtime by default. This means in addition to installing `babel`, you should also install `babel-runtime`.
-
-- Templates and CSS are now non-minified by default. To enable minification, run the build with `NODE_ENV=production`.
-
-- Options for built-in pre-processors can now be configured in `vue.config.js`.
-
-- `vue-component-compiler` has been merged into `vueify`. It is now exposed as `require('vueify').compiler`.
+Please see the [Releases](https://github.com/vuejs/vueify/releases) page for changes in versions ^9.0.0.
 
 ## License
 
